@@ -7,8 +7,8 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
-const User = require('./models/User');
-const Meeting = require('./models/Meeting');
+const User = require('./Models/user');
+const Meeting = require('./Models/Meeting');
 
 const app = express();
 const server = http.createServer(app);
