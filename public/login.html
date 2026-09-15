@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Login / Sign Up - NexMeet</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+</head>
+<body class="lobby-body">
+  <div class="lobby-container">
+    <div class="header">
+      <h1><i class="fa-solid fa-video text-blue"></i> NexMeet</h1>
+      <p id="formSubtitle">Sign in to start or join meetings</p>
+    </div>
+
+    <div class="card">
+      <div class="auth-tabs">
+        <button id="tabLogin" class="tab-btn active">Sign In</button>
+        <button id="tabSignup" class="tab-btn">Sign Up</button>
+      </div>
+
+      <div id="authAlert" class="auth-alert hidden"></div>
+
+      <form id="authForm">
+        <div class="form-group" id="nameGroup" style="display: none;">
+          <label for="authName">Full Name</label>
+          <input type="text" id="authName" placeholder="Enter your full name" />
+        </div>
+
+        <div class="form-group">
+          <label for="authEmail">Email Address</label>
+          <input type="email" id="authEmail" placeholder="name@example.com" required />
+        </div>
+
+        <div class="form-group">
+          <label for="authPassword">Password</label>
+          <input type="password" id="authPassword" placeholder="••••••••" required />
+        </div>
+
+        <button type="submit" id="authSubmitBtn" class="btn btn-primary" style="margin-top: 14px;">
+          Sign In
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <script src="/js/auth.js"></script>
+</body>
+</html>

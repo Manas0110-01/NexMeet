@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NexMeet - Dashboard</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+</head>
+<body class="dashboard-body">
+
+  <!-- Navigation Bar -->
+  <header class="dash-navbar">
+    <div class="dash-nav-container">
+      <div class="logo">
+        <i class="fa-solid fa-video text-blue"></i> <span>NexMeet</span>
+      </div>
+
+      <div class="dash-user-controls">
+        <span id="userGreeting" class="user-greeting">
+          <i class="fa-solid fa-circle-user"></i> Loading account...
+        </span>
+        <button id="logoutBtn" class="dash-logout-btn" title="Sign out of NexMeet">
+          <i class="fa-solid fa-right-from-bracket"></i> Log Out
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Dashboard Hub -->
+  <main class="dash-main-container">
+
+    <!-- Analytics Stat Cards -->
+    <div class="analytics-row">
+      <div class="stat-card">
+        <div class="stat-icon text-blue"><i class="fa-solid fa-video"></i></div>
+        <div class="stat-info">
+          <h3 id="statTotalMeetings">0</h3>
+          <p>Meetings Hosted</p>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon text-success"><i class="fa-solid fa-clock"></i></div>
+        <div class="stat-info">
+          <h3 id="statTotalMinutes">0m</h3>
+          <p>Minutes in Meeting</p>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon text-warning"><i class="fa-solid fa-users"></i></div>
+        <div class="stat-info">
+          <h3 id="statUniqueParticipants">0</h3>
+          <p>Participants Met</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Grid -->
+    <div class="dash-grid">
+      
+      <!-- Left Column: Actions, Join, and Pre-Call Check -->
+      <section class="dash-card dash-actions-card">
+        <div class="dash-clock-widget">
+          <h1 id="dashClock">00:00 AM</h1>
+          <p id="dashDate">Loading date...</p>
+        </div>
+
+        <div class="action-buttons-stack">
+          <button id="newMeetingBtn" class="btn btn-primary dash-action-btn">
+            <i class="fa-solid fa-video"></i>
+            <div>
+              <strong>New Meeting</strong>
+              <small>Start an instant room</small>
+            </div>
+          </button>
+        </div>
+
+        <div class="divider"><span>or join existing meeting</span></div>
+
+        <div class="join-box">
+          <input type="text" id="roomInput" placeholder="Enter Meeting Code (e.g. 7a3f89b2)" />
+          <button id="joinMeetingBtn" class="btn btn-secondary">Join</button>
+        </div>
+
+        <!-- Recent Rooms Section -->
+        <div class="recent-rooms-section">
+          <h3><i class="fa-solid fa-clock-rotate-left"></i> Quick Rejoin</h3>
+          <div id="recentRoomsList" class="recent-rooms-list">
+            <p class="no-recents">No quick rooms yet.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Column: Interactive Hardware Test -->
+      <section class="dash-card dash-preview-card">
+        <div class="preview-header">
+          <h3><i class="fa-solid fa-sliders"></i> Pre-Meeting Hardware Check</h3>
+          <span class="preview-badge" id="deviceStatusBadge">Checking devices...</span>
+        </div>
+
+        <div class="dash-video-preview-wrapper">
+          <video id="dashPreviewVideo" autoplay muted playsinline></video>
+          <div id="dashCameraOffPlaceholder" class="preview-placeholder hidden">
+            <i class="fa-solid fa-video-slash"></i>
+            <span>Camera is turned off</span>
+          </div>
+          <div class="preview-controls-overlay">
+            <button id="dashToggleMicBtn" class="preview-ctrl-btn" title="Toggle Microphone">
+              <i class="fa-solid fa-microphone"></i>
+            </button>
+            <button id="dashToggleCamBtn" class="preview-ctrl-btn" title="Toggle Camera">
+              <i class="fa-solid fa-video"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="mic-meter-box">
+          <div class="mic-meter-label">
+            <i class="fa-solid fa-microphone-lines"></i>
+            <span>Microphone Level:</span>
+          </div>
+          <div class="mic-meter-track">
+            <div id="micMeterFill" class="mic-meter-fill"></div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- MongoDB Past Meetings Section -->
+    <section class="dash-card history-section">
+      <div class="history-header">
+        <h3><i class="fa-solid fa-database text-blue"></i> Past Meetings</h3>
+        <button id="refreshHistoryBtn" class="refresh-btn" title="Refresh meeting history">
+          <i class="fa-solid fa-arrows-rotate"></i> Refresh
+        </button>
+      </div>
+
+      <div class="history-table-wrapper">
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>Room Code</th>
+              <th>Date & Time</th>
+              <th>Duration</th>
+              <th>Participants</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="historyTableBody">
+            <tr>
+              <td colspan="5" class="table-empty">Loading past meetings...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="/js/main.js"></script>
+</body>
+</html>

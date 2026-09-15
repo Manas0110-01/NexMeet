@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NexMeet - Video Meetings & Team Collaboration</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+</head>
+<body class="landing-body">
+
+  <!-- Navigation Bar -->
+  <nav class="navbar">
+    <div class="nav-container">
+      <div class="logo">
+        <i class="fa-solid fa-video text-blue"></i> <span>NexMeet</span>
+      </div>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#about">About</a>
+        <a href="/login.html" class="nav-btn-secondary" id="navSignInBtn">Sign In</a>
+        <a href="/login.html" class="nav-btn-primary" id="navSignUpBtn">Sign Up Free</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <header class="hero-section">
+    <div class="hero-content">
+      <span class="badge">Next-Gen Real-Time Calling</span>
+      <h1>Connect and collaborate anywhere, with anyone.</h1>
+      <p>
+        NexMeet brings teams together with high-definition video calls, seamless screen sharing, interactive live reactions, and instant in-meeting messaging.
+      </p>
+
+      <!-- Action Form -->
+      <div class="hero-actions">
+        <div class="join-action-box">
+          <input type="text" id="landingRoomCode" placeholder="Enter Meeting Code" />
+          <button id="landingJoinBtn" class="btn btn-secondary">Join</button>
+        </div>
+        <button id="landingHostBtn" class="btn btn-primary host-btn">
+          <i class="fa-solid fa-video"></i> Host a Meeting
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Features Section -->
+  <section class="features-section" id="features">
+    <div class="section-title">
+      <h2>Engineered for seamless collaboration</h2>
+      <p>Everything you need for an interactive, modern meeting experience.</p>
+    </div>
+
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon"><i class="fa-solid fa-display text-blue"></i></div>
+        <h3>HD Screen Sharing</h3>
+        <p>Present slide decks, code, documents, or entire screens in ultra-smooth framerates with one click.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon"><i class="fa-solid fa-volume-high text-blue"></i></div>
+        <h3>Active Speaker Detection</h3>
+        <p>Dynamic audio analysis automatically highlights whoever is speaking so discussions stay organized.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon"><i class="fa-solid fa-icons text-blue"></i></div>
+        <h3>Interactive Reactions</h3>
+        <p>Keep meetings engaging with floating emoji reactions and non-verbal feedback like hand raising.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon"><i class="fa-solid fa-shield-halved text-blue"></i></div>
+        <h3>Secure Authentication</h3>
+        <p>Bcrypt password hashing and JWT sessions backed by local MongoDB persistence.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- About Section -->
+  <section class="about-section" id="about">
+    <div class="about-card">
+      <div class="about-text">
+        <h2>Powered by WebRTC & WebSockets</h2>
+        <p>
+          NexMeet establishes peer-to-peer audio and video streaming using browser-native WebRTC APIs, paired with high-concurrency Node.js and Socket.io signaling. No downloads or installations required.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>&copy; 2026 NexMeet. Built with Node.js, Express, WebRTC, and MongoDB.</p>
+  </footer>
+
+  <script>
+    const landingJoinBtn = document.getElementById('landingJoinBtn');
+    const landingRoomCode = document.getElementById('landingRoomCode');
+    const landingHostBtn = document.getElementById('landingHostBtn');
+    const navSignInBtn = document.getElementById('navSignInBtn');
+    const navSignUpBtn = document.getElementById('navSignUpBtn');
+
+    async function checkUser() {
+      try {
+        const res = await fetch('/api/me');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.user) {
+            navSignInBtn.textContent = 'Dashboard';
+            navSignInBtn.href = '/dashboard';
+            navSignUpBtn.style.display = 'none';
+          }
+        }
+      } catch (e) {}
+    }
+
+    landingJoinBtn.addEventListener('click', () => {
+      const code = landingRoomCode.value.trim();
+      if (!code) {
+        alert('Please enter a valid meeting code.');
+        return;
+      }
+      window.location.href = `/room/${code}`;
+    });
+
+    landingHostBtn.addEventListener('click', async () => {
+      const res = await fetch('/api/create-room');
+      if (res.status === 401 || res.redirected) {
+        window.location.href = '/login.html';
+        return;
+      }
+      const data = await res.json();
+      window.location.href = `/room/${data.roomId}`;
+    });
+
+    checkUser();
+  </script>
+</body>
+</html>

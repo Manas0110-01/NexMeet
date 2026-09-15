@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NexMeet Meeting</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body class="meeting-body">
+  <div class="main-wrapper">
+    <div class="main-left">
+      <!-- Toast Alert Notification -->
+      <div id="toastNotification" class="toast-notification hidden">
+        <i class="fa-solid fa-check"></i> <span id="toastMsg">Invite link copied to clipboard!</span>
+      </div>
+
+      <!-- Kicked / Removed Modal Overlay -->
+      <div id="kickedModal" class="modal-overlay hidden">
+        <div class="modal-card">
+          <div class="modal-icon text-danger">
+            <i class="fa-solid fa-user-xmark"></i>
+          </div>
+          <h2>You've been removed</h2>
+          <p>Someone with host privileges removed you from this meeting.</p>
+          <div class="modal-actions">
+            <button id="rejoinMeetingBtn" class="btn btn-primary">
+              <i class="fa-solid fa-arrow-rotate-right"></i> Rejoin Meeting
+            </button>
+            <button id="returnDashboardBtn" class="btn btn-secondary">
+              <i class="fa-solid fa-house"></i> Return to Dashboard
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recording Indicator -->
+      <div id="recordingIndicator" class="recording-indicator hidden">
+        <span class="rec-dot"></span> <span>REC</span>
+      </div>
+
+      <!-- Collaborative Whiteboard Container -->
+      <div id="whiteboardContainer" class="whiteboard-container hidden">
+        <div class="whiteboard-toolbar">
+          <div class="tool-group">
+            <span class="tool-title"><i class="fa-solid fa-chalkboard"></i> Whiteboard</span>
+          </div>
+
+          <div class="tool-group">
+            <label>Color:</label>
+            <input type="color" id="wbColorPicker" value="#ffffff" />
+            <button class="wb-preset-color" style="background:#ffffff;" data-color="#ffffff"></button>
+            <button class="wb-preset-color" style="background:#eb5545;" data-color="#eb5545"></button>
+            <button class="wb-preset-color" style="background:#0b5cff;" data-color="#0b5cff"></button>
+            <button class="wb-preset-color" style="background:#2ed573;" data-color="#2ed573"></button>
+            <button class="wb-preset-color" style="background:#ffa502;" data-color="#ffa502"></button>
+          </div>
+
+          <div class="tool-group">
+            <label>Size:</label>
+            <select id="wbLineWidth">
+              <option value="2">Thin</option>
+              <option value="5" selected>Medium</option>
+              <option value="12">Thick</option>
+            </select>
+          </div>
+
+          <div class="tool-group">
+            <button id="wbEraserBtn" class="wb-tool-btn" title="Eraser">
+              <i class="fa-solid fa-eraser"></i> Eraser
+            </button>
+            <button id="wbClearBtn" class="wb-tool-btn danger" title="Clear Canvas">
+              <i class="fa-solid fa-trash-can"></i> Clear All
+            </button>
+          </div>
+
+          <button id="closeWhiteboardBtn" class="wb-close-btn" title="Close Whiteboard">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+        <canvas id="whiteboardCanvas"></canvas>
+      </div>
+
+      <!-- Floating Reaction Layer -->
+      <div id="reactionOverlay" class="reaction-overlay"></div>
+
+      <!-- Video Grid -->
+      <div class="video-grid" id="videoGrid">
+        <div class="video-card" id="localVideoContainer">
+          <video id="localVideo" muted autoplay playsinline></video>
+          <span class="user-label" id="localLabel">You</span>
+          <span class="hand-badge hidden" id="localHandBadge">✋ Raised</span>
+        </div>
+      </div>
+
+      <!-- Bottom Control Bar -->
+      <div class="control-bar">
+        <div class="control-group left">
+          <div class="info-pill" id="meetingCodeDisplay">Room: Loading...</div>
+          <button id="copyInviteBtn" class="copy-invite-btn" title="Copy meeting link to share">
+            <i class="fa-solid fa-link"></i> <span>Copy Invite Link</span>
+          </button>
+        </div>
+
+        <div class="control-group center">
+          <button id="micBtn" class="ctrl-btn" title="Mute/Unmute Mic">
+            <i class="fa-solid fa-microphone"></i>
+            <span>Mute</span>
+          </button>
+          <button id="videoBtn" class="ctrl-btn" title="Start/Stop Video">
+            <i class="fa-solid fa-video"></i>
+            <span>Stop Video</span>
+          </button>
+
+          <!-- Virtual Backgrounds Dropup -->
+          <div class="effects-picker-wrapper">
+            <button id="effectsToggleBtn" class="ctrl-btn" title="Virtual Backgrounds & Effects">
+              <i class="fa-solid fa-wand-magic-sparkles"></i>
+              <span>Effects</span>
+            </button>
+            <div id="effectsMenu" class="effects-menu hidden">
+              <h4>Virtual Backgrounds</h4>
+              <div class="effects-grid">
+                <button class="effect-opt-btn active" data-effect="none">
+                  <i class="fa-solid fa-ban"></i>
+                  <span>None</span>
+                </button>
+                <button class="effect-opt-btn" data-effect="blur">
+                  <i class="fa-solid fa-water"></i>
+                  <span>Blur</span>
+                </button>
+                <button class="effect-opt-btn" data-effect="office">
+                  <i class="fa-solid fa-building"></i>
+                  <span>Office</span>
+                </button>
+                <button class="effect-opt-btn" data-effect="library">
+                  <i class="fa-solid fa-book"></i>
+                  <span>Library</span>
+                </button>
+                <button class="effect-opt-btn" data-effect="gradient">
+                  <i class="fa-solid fa-palette"></i>
+                  <span>Gradient</span>
+                </button>
+                <button class="effect-opt-btn" data-effect="studio">
+                  <i class="fa-solid fa-cube"></i>
+                  <span>Studio</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <button id="screenShareBtn" class="ctrl-btn" title="Share Screen">
+            <i class="fa-solid fa-arrow-up-from-bracket"></i>
+            <span>Share</span>
+          </button>
+          <button id="whiteboardToggleBtn" class="ctrl-btn" title="Open Whiteboard">
+            <i class="fa-solid fa-chalkboard"></i>
+            <span>Whiteboard</span>
+          </button>
+          <button id="recordBtn" class="ctrl-btn" title="Record Meeting">
+            <i class="fa-solid fa-circle-dot"></i>
+            <span>Record</span>
+          </button>
+
+          <!-- Host Moderation Dropup -->
+          <div class="host-controls-wrapper hidden" id="hostControlsWrapper">
+            <button id="hostControlsBtn" class="ctrl-btn host-btn-accent" title="Host Moderation">
+              <i class="fa-solid fa-user-shield"></i>
+              <span>Host</span>
+            </button>
+            <div id="hostMenu" class="host-menu hidden">
+              <button id="muteAllBtn" class="host-action-btn">
+                <i class="fa-solid fa-microphone-slash"></i> Mute All
+              </button>
+              <button id="lockRoomBtn" class="host-action-btn">
+                <i class="fa-solid fa-lock"></i> <span id="lockBtnText">Lock Room</span>
+              </button>
+            </div>
+          </div>
+
+          <button id="handBtn" class="ctrl-btn" title="Raise Hand">
+            <i class="fa-solid fa-hand"></i>
+            <span>Raise Hand</span>
+          </button>
+
+          <!-- Reactions Popup -->
+          <div class="reaction-picker-wrapper">
+            <button id="reactionToggleBtn" class="ctrl-btn" title="Reactions">
+              <i class="fa-regular fa-face-smile"></i>
+              <span>Reactions</span>
+            </button>
+            <div id="reactionMenu" class="reaction-menu hidden">
+              <button class="emoji-btn" data-emoji="👍">👍</button>
+              <button class="emoji-btn" data-emoji="👏">👏</button>
+              <button class="emoji-btn" data-emoji="❤️">❤️</button>
+              <button class="emoji-btn" data-emoji="😂">😂</button>
+              <button class="emoji-btn" data-emoji="🎉">🎉</button>
+            </div>
+          </div>
+
+          <!-- Participants Drawer Toggle Button -->
+          <button id="participantsToggleBtn" class="ctrl-btn" title="View Participants">
+            <i class="fa-solid fa-users"></i>
+            <span id="participantsCountLabel">People (1)</span>
+          </button>
+
+          <!-- Chat Toggle Button -->
+          <button id="chatToggleBtn" class="ctrl-btn" title="Toggle Chat">
+            <i class="fa-solid fa-message"></i>
+            <span>Chat</span>
+          </button>
+        </div>
+
+        <div class="control-group right">
+          <button id="leaveBtn" class="ctrl-btn btn-danger" title="Leave Meeting">
+            <i class="fa-solid fa-phone-slash"></i>
+            <span>Leave</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Participants Drawer Panel -->
+    <div class="side-panel hidden" id="participantsPanel">
+      <div class="panel-header">
+        <h3>Participants (<span id="panelHeaderCount">1</span>)</h3>
+        <button id="closeParticipantsBtn"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="participants-list" id="participantsList"></div>
+    </div>
+
+    <!-- Chat Sidebar Panel -->
+    <div class="side-panel hidden" id="chatPanel">
+      <div class="panel-header">
+        <h3>In-Call Messages</h3>
+        <button id="closeChatBtn"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="chat-messages" id="chatMessages"></div>
+      <div class="chat-input-box">
+        <input type="text" id="chatInput" placeholder="Send a message to everyone..." />
+        <button id="sendMsgBtn"><i class="fa-solid fa-paper-plane"></i></button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/room.js"></script>
+</body>
+</html>
