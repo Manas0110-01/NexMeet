@@ -15,8 +15,7 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
 const JWT_SECRET = 'nexmeet_secret_jwt_key_99887766';
-const MONGO_URI = 'mongodb://127.0.0.1:27017/nexmeet';
-
+const MONGO_URI = process.env.MONGO_URI;
 mongoose.connect(MONGO_URI)
   .then(() => console.log('Connected to MongoDB Compass (Database: nexmeet)'))
   .catch((err) => console.error('MongoDB connection error:', err));
