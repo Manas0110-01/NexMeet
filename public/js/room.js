@@ -995,6 +995,55 @@ function stopRecording() {
   recordingIndicator.classList.add('hidden');
   showToast('Recording saved. Preparing download...');
 }
+// Function to display live notification popups
+function showNotification(message) {
+    const container = document.getElementById('notification-container');
+    if (!container) return;
+    
+    const toast = document.createElement('div');
+    toast.innerText = message;
+    toast.style.background = 'rgba(20, 20, 20, 0.9)';
+    toast.style.color = '#fff';
+    toast.style.padding = '12px 18px';
+    toast.style.borderRadius = '8px';
+    toast.style.fontSize = '14px';
+    toast.style.boxShadow = '0 4px 15px rgba(0,0,0,0.4)';
+    toast.style.transition = 'opacity 0.3s ease';
+    toast.style.borderLeft = '4px solid #4f46e5';
+
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, 4000);
+}
+
+// Socket Event Listeners for Notifications & Permissions
+socket.on('notification', (data) => {
+    showNotification(data.message);
+});
+
+socket.on('kicked-out', () => {
+    alert('You have been removed from the meeting by the host.');
+    window.location.href = '/dashboard.html';
+});
+
+socket.on('waiting-for-approval', () => {
+    document.body.innerHTML = `
+        <div style="display:flex; flex-direction:column; justify-content:center; align-items:center; height:100vh; color:#fff; background:#0f172a; font-family:sans-serif; text-align:center; padding:20px;">
+            <h2>Waiting Room</h2>
+            <p style="color:#94a3b8; margin-top:10px;">The host has enabled a waiting room. Please wait, you'll be let in soon.</p>
+        </div>`;
+});
+
+socket.on('admission-approved', () => {
+    window.location.reload();
+});
+
+socket.on('role-updated', (data) => {
+    showNotification(`Your role has been updated to: ${data.role.toUpperCase()}`);
+});
 
 function saveRecordingFile() {
   if (recordedChunks.length === 0) return;

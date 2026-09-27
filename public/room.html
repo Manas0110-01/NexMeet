@@ -9,6 +9,7 @@
   <script src="/socket.io/socket.io.js"></script>
 </head>
 <body class="meeting-body">
+  
   <div class="main-wrapper">
     <div class="main-left">
       <!-- Toast Alert Notification -->
@@ -176,6 +177,11 @@
               <button id="lockRoomBtn" class="host-action-btn">
                 <i class="fa-solid fa-lock"></i> <span id="lockBtnText">Lock Room</span>
               </button>
+              <!-- Waiting Room Toggle Option -->
+              <div class="host-action-toggle" style="padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: #fff; cursor: pointer;">
+                <span><i class="fa-solid fa-person-circle-question"></i> Waiting Room</span>
+                <input type="checkbox" id="waitingRoomCheckbox" style="cursor: pointer;" />
+              </div>
             </div>
           </div>
 

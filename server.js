@@ -128,10 +128,12 @@ app.get('/api/create-room', requireAuth, async (req, res) => {
       hostUserId: req.user.id,
       hostName: req.user.name,
       locked: false,
+      approvalRequired: false, // Waiting room setting
+      waitingList: [],
+      cohosts: new Set(),
       startedAt: new Date()
     };
 
-    // Save session in MongoDB
     const meeting = new Meeting({
       roomId,
       hostUserId: req.user.id,
@@ -152,7 +154,6 @@ app.get('/api/create-room', requireAuth, async (req, res) => {
   }
 });
 
-// Fetch Meeting Analytics & History for Logged-In User
 app.get('/api/meetings/history', requireAuth, async (req, res) => {
   try {
     const meetings = await Meeting.find({ hostUserId: req.user.id })
@@ -195,20 +196,33 @@ const rooms = {};
 
 io.on('connection', (socket) => {
   socket.on('join-room', async ({ roomId, userName, userId, isAudioOn, isVideoOn }) => {
-    if (roomMetadata[roomId] && roomMetadata[roomId].locked) {
-      const isHost = roomMetadata[roomId].hostUserId === userId;
-      if (!isHost) {
-        socket.emit('room-locked-error');
-        return;
+    const meta = roomMetadata[roomId];
+    const isHost = meta && meta.hostUserId === userId;
+
+    // Check if room is locked
+    if (meta && meta.locked && !isHost) {
+      socket.emit('room-locked-error');
+      return;
+    }
+
+    // Check if waiting room approval is required
+    if (meta && meta.approvalRequired && !isHost) {
+      if (!meta.waitingList) meta.waitingList = [];
+      meta.waitingList.push({ id: socket.id, userId, userName: userName || 'Guest' });
+      socket.emit('waiting-for-approval');
+
+      // Notify host
+      const hostSocket = rooms[roomId]?.find(u => u.isHost);
+      if (hostSocket) {
+        io.to(hostSocket.id).emit('approval-requested', { socketId: socket.id, userName: userName || 'Guest' });
       }
+      return;
     }
 
     socket.join(roomId);
     socket.userName = userName || 'Guest';
     socket.roomId = roomId;
     socket.userId = userId;
-
-    const isHost = roomMetadata[roomId] && roomMetadata[roomId].hostUserId === userId;
     socket.isHost = isHost;
 
     if (!rooms[roomId]) rooms[roomId] = [];
@@ -223,7 +237,6 @@ io.on('connection', (socket) => {
     };
     rooms[roomId].push(participantInfo);
 
-    // Save joining participant to MongoDB meeting history
     try {
       await Meeting.updateOne(
         { roomId },
@@ -243,8 +256,11 @@ io.on('connection', (socket) => {
 
     socket.emit('role-assignment', {
       isHost,
-      isLocked: roomMetadata[roomId] ? roomMetadata[roomId].locked : false
+      isLocked: meta ? meta.locked : false,
+      approvalRequired: meta ? meta.approvalRequired : false
     });
+
+    socket.to(roomId).emit('notification', { message: `${socket.userName} joined the meeting.` });
 
     socket.to(roomId).emit('user-connected', {
       socketId: socket.id,
@@ -258,6 +274,53 @@ io.on('connection', (socket) => {
     socket.emit('participant-roster', rooms[roomId]);
     const existingUsers = rooms[roomId].filter((u) => u.id !== socket.id);
     socket.emit('all-users', existingUsers);
+
+    // Host / Co-Host Control Events
+    socket.on('toggle-waiting-room', (enabled) => {
+      if (!socket.isHost) return;
+      if (meta) {
+        meta.approvalRequired = enabled;
+        io.to(roomId).emit('notification', { message: `Waiting room has been ${enabled ? 'enabled' : 'disabled'} by the host.` });
+        io.to(roomId).emit('waiting-room-status-changed', enabled);
+      }
+    });
+
+    socket.on('approve-participant', (targetSocketId) => {
+      const isCoHost = meta?.cohosts?.has(socket.id);
+      if (!socket.isHost && !isCoHost) return;
+
+      if (meta && meta.waitingList) {
+        meta.waitingList = meta.waitingList.filter(p => p.id !== targetSocketId);
+        io.to(targetSocketId).emit('admission-approved');
+        io.to(roomId).emit('notification', { message: `A participant was admitted to the meeting.` });
+      }
+    });
+
+    socket.on('toggle-cohost', ({ targetSocketId, targetUserName }) => {
+      if (!socket.isHost) return;
+      if (!meta.cohosts) meta.cohosts = new Set();
+
+      if (meta.cohosts.has(targetSocketId)) {
+        meta.cohosts.delete(targetSocketId);
+        io.to(targetSocketId).emit('role-updated', { role: 'participant' });
+        io.to(roomId).emit('notification', { message: `${targetUserName} is no longer a co-host.` });
+      } else {
+        meta.cohosts.add(targetSocketId);
+        io.to(targetSocketId).emit('role-updated', { role: 'co-host' });
+        io.to(roomId).emit('notification', { message: `${targetUserName} was promoted to co-host.` });
+      }
+    });
+
+    socket.on('kick-participant', (targetSocketId) => {
+      const isCoHost = meta?.cohosts?.has(socket.id);
+      if (!socket.isHost && !isCoHost) return;
+
+      const targetUser = rooms[roomId]?.find(u => u.id === targetSocketId);
+      const targetName = targetUser ? targetUser.name : 'A participant';
+
+      io.to(targetSocketId).emit('kicked-from-room');
+      io.to(roomId).emit('notification', { message: `${targetName} was removed from the meeting.` });
+    });
 
     socket.on('media-status-change', ({ audio, video }) => {
       const user = rooms[roomId]?.find((u) => u.id === socket.id);
@@ -274,20 +337,18 @@ io.on('connection', (socket) => {
 
     socket.on('toggle-lock-room', () => {
       if (!socket.isHost) return;
-      if (roomMetadata[roomId]) {
-        roomMetadata[roomId].locked = !roomMetadata[roomId].locked;
-        io.to(roomId).emit('room-lock-status', roomMetadata[roomId].locked);
+      if (meta) {
+        meta.locked = !meta.locked;
+        io.to(roomId).emit('room-lock-status', meta.locked);
+        io.to(roomId).emit('notification', { message: `Meeting has been ${meta.locked ? 'locked' : 'unlocked'} by the host.` });
       }
     });
 
     socket.on('host-mute-all', () => {
-      if (!socket.isHost) return;
+      const isCoHost = meta?.cohosts?.has(socket.id);
+      if (!socket.isHost && !isCoHost) return;
       socket.to(roomId).emit('force-mute');
-    });
-
-    socket.on('kick-participant', (targetSocketId) => {
-      if (!socket.isHost) return;
-      io.to(targetSocketId).emit('kicked-from-room');
+      io.to(roomId).emit('notification', { message: `All participants were muted by host/co-host.` });
     });
 
     socket.on('send-message', (message) => {
@@ -350,10 +411,13 @@ io.on('connection', (socket) => {
       if (rooms[roomId]) {
         rooms[roomId] = rooms[roomId].filter((u) => u.id !== socket.id);
 
-        // When room completely empties, calculate duration and mark as ended in MongoDB
+        if (meta?.cohosts) {
+          meta.cohosts.delete(socket.id);
+        }
+
         if (rooms[roomId].length === 0) {
           const endedAt = new Date();
-          const startedAt = roomMetadata[roomId]?.startedAt || endedAt;
+          const startedAt = meta?.startedAt || endedAt;
           const durationSeconds = Math.max(0, Math.round((endedAt - new Date(startedAt)) / 1000));
 
           try {
@@ -368,6 +432,10 @@ io.on('connection', (socket) => {
           delete rooms[roomId];
           delete roomMetadata[roomId];
         }
+      }
+      
+      if (socket.userName) {
+        io.to(roomId).emit('notification', { message: `${socket.userName} left the meeting.` });
       }
       io.to(roomId).emit('participant-left', socket.id);
       socket.to(roomId).emit('user-disconnected', socket.id);
