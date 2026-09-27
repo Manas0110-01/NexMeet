@@ -46,6 +46,7 @@ const hostMenu = document.getElementById('hostMenu');
 const muteAllBtn = document.getElementById('muteAllBtn');
 const lockRoomBtn = document.getElementById('lockRoomBtn');
 const lockBtnText = document.getElementById('lockBtnText');
+const waitingRoomCheckbox = document.getElementById('waitingRoomCheckbox');
 
 // Whiteboard UI
 const whiteboardContainer = document.getElementById('whiteboardContainer');
@@ -76,14 +77,14 @@ meetingCodeDisplay.textContent = `Room: ${roomId}`;
 localLabel.textContent = `${userName} (You)`;
 
 let localStream = new MediaStream();
-let rawCameraStream = null; // Unprocessed hardware stream
+let rawCameraStream = null;
 let activeEffect = 'none';
 let effectCanvas = null;
 let effectCtx = null;
 let effectAnimId = null;
 let processedStream = null;
 
-let peers = {}; // socketId -> RTCPeerConnection
+let peers = {};
 let isScreenSharing = false;
 let screenStream = null;
 let isHandRaised = false;
@@ -140,6 +141,35 @@ function showToast(msg) {
   }, 2500);
 }
 
+// Global Notification Toast Container Support
+function showNotification(message) {
+    let container = document.getElementById('notification-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'notification-container';
+        container.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px;';
+        document.body.appendChild(container);
+    }
+    
+    const toast = document.createElement('div');
+    toast.innerText = message;
+    toast.style.background = 'rgba(20, 20, 20, 0.9)';
+    toast.style.color = '#fff';
+    toast.style.padding = '12px 18px';
+    toast.style.borderRadius = '8px';
+    toast.style.fontSize = '14px';
+    toast.style.boxShadow = '0 4px 15px rgba(0,0,0,0.4)';
+    toast.style.transition = 'opacity 0.3s ease';
+    toast.style.borderLeft = '4px solid #4f46e5';
+
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, 4000);
+}
+
 async function init() {
   let currentUserId = null;
   try {
@@ -156,7 +186,6 @@ async function init() {
       audio: true
     });
     
-    // Store raw tracks and build localStream
     rawCameraStream.getTracks().forEach((track) => {
       localStream.addTrack(track);
     });
@@ -184,12 +213,25 @@ async function init() {
     window.location.href = '/';
   });
 
-  socket.on('role-assignment', ({ isHost, isLocked }) => {
+  socket.on('waiting-for-approval', () => {
+    document.body.innerHTML = `
+        <div style="display:flex; flex-direction:column; justify-content:center; align-items:center; height:100vh; color:#fff; background:#0f172a; font-family:sans-serif; text-align:center; padding:20px;">
+            <h2>Waiting Room</h2>
+            <p style="color:#94a3b8; margin-top:10px;">The host has enabled a waiting room. Please wait, you'll be let in soon.</p>
+        </div>`;
+  });
+
+  socket.on('admission-approved', () => {
+    window.location.reload();
+  });
+
+  socket.on('role-assignment', ({ isHost, isLocked, approvalRequired }) => {
     isUserHost = isHost;
     isRoomLocked = isLocked;
     if (isHost) {
       hostControlsWrapper.classList.remove('hidden');
       localLabel.textContent = `${userName} (Host, You)`;
+      if (waitingRoomCheckbox) waitingRoomCheckbox.checked = approvalRequired;
     }
     updateLockBtnUI();
   });
@@ -197,7 +239,18 @@ async function init() {
   socket.on('room-lock-status', (locked) => {
     isRoomLocked = locked;
     updateLockBtnUI();
-    showToast(locked ? 'Meeting has been locked by the host.' : 'Meeting unlocked.');
+  });
+
+  socket.on('waiting-room-status-changed', (enabled) => {
+    if (waitingRoomCheckbox) waitingRoomCheckbox.checked = enabled;
+  });
+
+  socket.on('role-updated', (data) => {
+    showNotification(`Your role has been updated to: ${data.role.toUpperCase()}`);
+  });
+
+  socket.on('notification', (data) => {
+    showNotification(data.message);
   });
 
   socket.on('force-mute', () => {
@@ -213,20 +266,11 @@ async function init() {
     }
   });
 
-  // Handle Being Removed/Kicked
   socket.on('kicked-from-room', () => {
-    if (localStream) {
-      localStream.getTracks().forEach((track) => track.stop());
-    }
-    if (rawCameraStream) {
-      rawCameraStream.getTracks().forEach((track) => track.stop());
-    }
-    if (screenStream) {
-      screenStream.getTracks().forEach((track) => track.stop());
-    }
-    if (isRecording) {
-      stopRecording();
-    }
+    if (localStream) localStream.getTracks().forEach((track) => track.stop());
+    if (rawCameraStream) rawCameraStream.getTracks().forEach((track) => track.stop());
+    if (screenStream) screenStream.getTracks().forEach((track) => track.stop());
+    if (isRecording) stopRecording();
     stopVirtualBackgroundPipeline();
 
     for (const peerId in peers) {
@@ -237,7 +281,6 @@ async function init() {
     kickedModal.classList.remove('hidden');
   });
 
-  // Participant Roster Received
   socket.on('participant-roster', (roster) => {
     participants.clear();
     roster.forEach((p) => {
@@ -249,7 +292,6 @@ async function init() {
   socket.on('user-connected', ({ socketId, userName, isHost, audio, video, hand }) => {
     participants.set(socketId, { id: socketId, name: userName, isHost, audio, video, hand });
     renderParticipants();
-    showToast(`${userName} ${isHost ? '(Host) ' : ''}joined the meeting`);
   });
 
   socket.on('participant-left', (socketId) => {
@@ -344,16 +386,13 @@ async function init() {
   setupWhiteboard();
 }
 
-// ==========================================
-// Virtual Background & Blur Engine
-// ==========================================
+// Virtual Backgrounds Pipeline
 function setupVirtualBackgroundPipeline() {
   effectCanvas = document.createElement('canvas');
   effectCanvas.width = 640;
   effectCanvas.height = 360;
   effectCtx = effectCanvas.getContext('2d');
 
-  // Hidden source video tag for camera feed processing
   const hiddenCamVideo = document.createElement('video');
   hiddenCamVideo.autoplay = true;
   hiddenCamVideo.muted = true;
@@ -367,15 +406,12 @@ function setupVirtualBackgroundPipeline() {
     }
 
     if (activeEffect === 'none') {
-      // Direct pass-through
       effectCtx.filter = 'none';
       effectCtx.drawImage(hiddenCamVideo, 0, 0, effectCanvas.width, effectCanvas.height);
     } else if (activeEffect === 'blur') {
-      // Background Blur Pipeline
       effectCtx.filter = 'blur(12px)';
       effectCtx.drawImage(hiddenCamVideo, 0, 0, effectCanvas.width, effectCanvas.height);
 
-      // Sharp subject simulation in center
       effectCtx.filter = 'none';
       effectCtx.save();
       effectCtx.beginPath();
@@ -384,10 +420,7 @@ function setupVirtualBackgroundPipeline() {
       effectCtx.drawImage(hiddenCamVideo, 0, 0, effectCanvas.width, effectCanvas.height);
       effectCtx.restore();
     } else {
-      // Virtual Preset Scenes (Office, Library, Studio, Gradient)
       drawPresetScene(activeEffect);
-      
-      // Overlay center persona
       effectCtx.filter = 'none';
       effectCtx.save();
       effectCtx.beginPath();
@@ -413,25 +446,15 @@ function drawPresetScene(effectName) {
     grad.addColorStop(1, '#485460');
     effectCtx.fillStyle = grad;
     effectCtx.fillRect(0, 0, w, h);
-    // Draw office window grid pattern
-    effectCtx.strokeStyle = 'rgba(255,255,255,0.08)';
-    effectCtx.lineWidth = 3;
-    for (let x = 40; x < w; x += 100) effectCtx.strokeRect(x, 20, 80, 200);
   } else if (effectName === 'library') {
     const grad = effectCtx.createLinearGradient(0, 0, 0, h);
     grad.addColorStop(0, '#2c1e13');
     grad.addColorStop(1, '#110b06');
     effectCtx.fillStyle = grad;
     effectCtx.fillRect(0, 0, w, h);
-    // Draw bookshelf rows
-    effectCtx.fillStyle = 'rgba(218, 165, 32, 0.15)';
-    effectCtx.fillRect(0, 80, w, 10);
-    effectCtx.fillRect(0, 180, w, 10);
-    effectCtx.fillRect(0, 280, w, 10);
   } else if (effectName === 'gradient') {
     const grad = effectCtx.createLinearGradient(0, 0, w, h);
     grad.addColorStop(0, '#0b5cff');
-    grad.addColorStop(0.5, '#6a11cb');
     grad.addColorStop(1, '#2575fc');
     effectCtx.fillStyle = grad;
     effectCtx.fillRect(0, 0, w, h);
@@ -448,7 +471,6 @@ function stopVirtualBackgroundPipeline() {
   if (effectAnimId) cancelAnimationFrame(effectAnimId);
 }
 
-// Effects Selector
 effectsToggleBtn.addEventListener('click', () => {
   effectsMenu.classList.toggle('hidden');
 });
@@ -461,7 +483,6 @@ document.querySelectorAll('.effect-opt-btn').forEach((btn) => {
     activeEffect = btn.getAttribute('data-effect');
     effectsMenu.classList.add('hidden');
 
-    // Switch video stream to the processed canvas output
     if (activeEffect === 'none') {
       const cameraTrack = rawCameraStream?.getVideoTracks()[0];
       if (cameraTrack) {
@@ -488,7 +509,6 @@ document.querySelectorAll('.effect-opt-btn').forEach((btn) => {
   });
 });
 
-// Rejoin and Return Dashboard Actions
 rejoinMeetingBtn.addEventListener('click', () => {
   window.location.reload();
 });
@@ -497,7 +517,7 @@ returnDashboardBtn.addEventListener('click', () => {
   window.location.href = '/dashboard';
 });
 
-// Participants Drawer Render Logic
+// Participants Drawer Render Logic with Co-host and Kick Actions
 function renderParticipants() {
   participantsList.innerHTML = '';
   const totalCount = participants.size;
@@ -507,30 +527,40 @@ function renderParticipants() {
   participants.forEach((user) => {
     const item = document.createElement('div');
     item.className = 'participant-item';
+    item.style.display = 'flex';
+    item.style.justify = 'space-between';
+    item.style.alignItems = 'center';
+    item.style.padding = '8px 12px';
+    item.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
 
     const isSelf = user.id === socket.id;
-    const initial = (user.name || 'G').charAt(0).toUpperCase();
+
+    let roleBadge = '';
+    if (user.isHost) roleBadge = '<span class="p-tag host-tag" style="background:#d97706; padding:2px 6px; border-radius:4px; font-size:11px; margin-left:6px;">Host</span>';
+
+    let actionButtons = '';
+    if (isUserHost && !user.isHost) {
+      actionButtons = `
+        <div style="display:flex; gap:6px; align-items:center;">
+          <button onclick="toggleCoHost('${user.id}', '${user.name}')" style="background:#374151; color:#fff; border:none; padding:4px 8px; border-radius:4px; font-size:11px; cursor:pointer;" title="Toggle Co-Host">Co-Host</button>
+          <button class="p-kick-btn" title="Remove Participant" data-id="${user.id}" style="background:#dc2626; color:#fff; border:none; padding:4px 8px; border-radius:4px; font-size:11px; cursor:pointer;">
+            <i class="fa-solid fa-user-xmark"></i>
+          </button>
+        </div>
+      `;
+    }
 
     item.innerHTML = `
-      <div class="p-info">
-        <div class="p-avatar">${initial}</div>
-        <div>
-          <span>${user.name}</span>
-          ${isSelf ? '<span class="p-tag">You</span>' : ''}
-          ${user.isHost ? '<span class="p-tag host-tag">Host</span>' : ''}
-        </div>
+      <div class="p-info" style="display:flex; align-items:center; gap:8px;">
+        <span style="color:#fff; font-size:14px;">${user.name}</span>
+        ${isSelf ? '<span class="p-tag" style="background:#4f46e5; padding:2px 6px; border-radius:4px; font-size:11px;">You</span>' : ''}
+        ${roleBadge}
       </div>
-      <div class="p-icons">
+      <div class="p-icons" style="display:flex; align-items:center; gap:10px;">
         ${user.hand ? '<span class="p-icon-hand" title="Hand Raised">✋</span>' : ''}
-        <i class="fa-solid ${user.audio ? 'fa-microphone p-icon-on' : 'fa-microphone-slash p-icon-off'}"></i>
-        <i class="fa-solid ${user.video ? 'fa-video p-icon-on' : 'fa-video-slash p-icon-off'}"></i>
-        ${
-          isUserHost && !isSelf
-            ? `<button class="p-kick-btn" title="Remove Participant" data-id="${user.id}">
-                 <i class="fa-solid fa-user-xmark"></i>
-               </button>`
-            : ''
-        }
+        <i class="fa-solid ${user.audio ? 'fa-microphone p-icon-on' : 'fa-microphone-slash p-icon-off'}" style="color:${user.audio ? '#2ed573' : '#eb5545'}"></i>
+        <i class="fa-solid ${user.video ? 'fa-video p-icon-on' : 'fa-video-slash p-icon-off'}" style="color:${user.video ? '#2ed573' : '#eb5545'}"></i>
+        ${actionButtons}
       </div>
     `;
 
@@ -547,7 +577,11 @@ function renderParticipants() {
   });
 }
 
-// Drawers Toggle
+// Global actions triggered from UI buttons
+window.toggleCoHost = function(targetSocketId, targetUserName) {
+  socket.emit('toggle-cohost', { targetSocketId, targetUserName });
+};
+
 participantsToggleBtn.addEventListener('click', () => {
   chatPanel.classList.add('hidden');
   participantsPanel.classList.toggle('hidden');
@@ -570,7 +604,7 @@ function updateLockBtnUI() {
   }
 }
 
-// Host Controls
+// Host Controls Actions
 hostControlsBtn.addEventListener('click', () => {
   hostMenu.classList.toggle('hidden');
 });
@@ -585,6 +619,13 @@ lockRoomBtn.addEventListener('click', () => {
   socket.emit('toggle-lock-room');
   hostMenu.classList.add('hidden');
 });
+
+if (waitingRoomCheckbox) {
+  waitingRoomCheckbox.addEventListener('change', (e) => {
+    const enabled = e.target.checked;
+    socket.emit('toggle-waiting-room', enabled);
+  });
+}
 
 function createPeer(userToSignal, callerId, peerName) {
   const peer = new RTCPeerConnection(iceServers);
@@ -671,18 +712,6 @@ function setupRemoteMedia(peerId, name, stream) {
 
     card.appendChild(video);
     card.appendChild(label);
-
-    if (isUserHost) {
-      const kickBtn = document.createElement('button');
-      kickBtn.className = 'kick-btn';
-      kickBtn.innerHTML = '<i class="fa-solid fa-user-xmark"></i> Kick';
-      kickBtn.onclick = () => {
-        if (confirm(`Remove ${name} from the meeting?`)) {
-          socket.emit('kick-participant', peerId);
-        }
-      };
-      card.appendChild(kickBtn);
-    }
 
     videoGrid.appendChild(card);
     attachAudioAnalyzer(stream, card);
@@ -995,55 +1024,6 @@ function stopRecording() {
   recordingIndicator.classList.add('hidden');
   showToast('Recording saved. Preparing download...');
 }
-// Function to display live notification popups
-function showNotification(message) {
-    const container = document.getElementById('notification-container');
-    if (!container) return;
-    
-    const toast = document.createElement('div');
-    toast.innerText = message;
-    toast.style.background = 'rgba(20, 20, 20, 0.9)';
-    toast.style.color = '#fff';
-    toast.style.padding = '12px 18px';
-    toast.style.borderRadius = '8px';
-    toast.style.fontSize = '14px';
-    toast.style.boxShadow = '0 4px 15px rgba(0,0,0,0.4)';
-    toast.style.transition = 'opacity 0.3s ease';
-    toast.style.borderLeft = '4px solid #4f46e5';
-
-    container.appendChild(toast);
-
-    setTimeout(() => {
-        toast.style.opacity = '0';
-        setTimeout(() => toast.remove(), 300);
-    }, 4000);
-}
-
-// Socket Event Listeners for Notifications & Permissions
-socket.on('notification', (data) => {
-    showNotification(data.message);
-});
-
-socket.on('kicked-out', () => {
-    alert('You have been removed from the meeting by the host.');
-    window.location.href = '/dashboard.html';
-});
-
-socket.on('waiting-for-approval', () => {
-    document.body.innerHTML = `
-        <div style="display:flex; flex-direction:column; justify-content:center; align-items:center; height:100vh; color:#fff; background:#0f172a; font-family:sans-serif; text-align:center; padding:20px;">
-            <h2>Waiting Room</h2>
-            <p style="color:#94a3b8; margin-top:10px;">The host has enabled a waiting room. Please wait, you'll be let in soon.</p>
-        </div>`;
-});
-
-socket.on('admission-approved', () => {
-    window.location.reload();
-});
-
-socket.on('role-updated', (data) => {
-    showNotification(`Your role has been updated to: ${data.role.toUpperCase()}`);
-});
 
 function saveRecordingFile() {
   if (recordedChunks.length === 0) return;
